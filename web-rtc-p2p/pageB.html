@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebRTC - Page B (Receiver)</title>
+    <style>body { font-family: sans-serif; padding: 20px; } textarea { width: 100%; height: 100px; }</style>
+</head>
+<body>
+    <h2>2. Page B (The Receiver)</h2>
+    
+    <h3>Step 2: Paste Code from Page A here:</h3>
+    <textarea id="remoteCode" placeholder="Paste Page A's code here..."></textarea>
+    <br><br>
+    <button id="createAnswer">Step 3: Generate Response Code</button>
+
+    <hr>
+
+    <h3>Your Response Code:</h3>
+    <textarea id="localCode" readonly placeholder="Click the button above to generate..."></textarea>
+
+    <hr>
+
+    <h3>P2P Chat Pipe</h3>
+    <input id="messageInput" type="text" placeholder="Type a message..." disabled />
+    <button id="sendButton" disabled>Send Message</button>
+    <p><strong>Chat Logs:</strong></p>
+    <pre id="logs" style="background: #f0f0f0; padding: 10px;"></pre>
+
+    <script>
+        const peerB = new RTCPeerConnection({ iceServers: [] });
+        let channelB;
+
+        peerB.ondatachannel = (event) => {
+            channelB = event.channel;
+            channelB.onopen = () => {
+                document.getElementById("messageInput").disabled = false;
+                document.getElementById("sendButton").disabled = false;
+                document.getElementById("logs").innerText += "CONNECTED! You can now type messages.\n";
+            };
+            channelB.onmessage = e => document.getElementById("logs").innerText += "Received: " + e.data + "\n";
+        };
+
+        document.getElementById("createAnswer").onclick = async () => {
+            const offerText = document.getElementById("remoteCode").value;
+            await peerB.setRemoteDescription(new RTCSessionDescription(JSON.parse(offerText)));
+            
+            peerB.onicecandidate = e => {
+                if (!e.candidate) {
+                    document.getElementById("localCode").value = JSON.stringify(peerB.localDescription);
+                }
+            };
+            const answer = await peerB.createAnswer();
+            await peerB.setLocalDescription(answer);
+        };
+
+        document.getElementById("sendButton").onclick = () => {
+            const msg = document.getElementById("messageInput").value;
+            channelB.send(msg);
+            document.getElementById("logs").innerText += "Sent: " + msg + "\n";
+            document.getElementById("messageInput").value = "";
+        };
+    </script>
+</body>
+</html>
+
