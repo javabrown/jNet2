@@ -1,55 +1,92 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>WebRTC - Page B (Receiver)</title>
-    <style>body { font-family: sans-serif; padding: 20px; } textarea { width: 100%; height: 100px; }</style>
+    <title>WebRTC - Page B (Text + Video)</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #fafafa; }
+        textarea { width: 100%; height: 70px; }
+        .video-container { display: flex; gap: 20px; margin-top: 15px; }
+        video { width: 320px; height: 240px; background: #222; border-radius: 8px; }
+        .box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
+    </style>
 </head>
 <body>
     <h2>2. Page B (The Receiver)</h2>
     
-    <h3>Step 2: Paste Code from Page A here:</h3>
-    <textarea id="remoteCode" placeholder="Paste Page A's code here..."></textarea>
-    <br><br>
-    <button id="createAnswer">Step 3: Generate Response Code</button>
+    <div class="box">
+        <h3>Step 3: Paste Code from Page A here</h3>
+        <textarea id="remoteCode" placeholder="Paste Page A's code here..."></textarea>
+        <br><br>
+        <button id="createAnswer">Step 4: Enable Camera & Generate Response</button>
+    </div>
 
-    <hr>
+    <div class="box">
+        <h3>Your Video Stream Preview</h3>
+        <div class="video-container">
+            <div><p>Local Video (You)</p><video id="localVideo" autoplay muted playsinline></video></div>
+            <div><p>Remote Video (Page A)</p><video id="remoteVideo" autoplay playsinline></video></div>
+        </div>
+    </div>
 
-    <h3>Your Response Code:</h3>
-    <textarea id="localCode" readonly placeholder="Click the button above to generate..."></textarea>
+    <div class="box">
+        <h3>Your Response Code</h3>
+        <textarea id="localCode" readonly placeholder="Click the button above to generate..."></textarea>
+    </div>
 
-    <hr>
-
-    <h3>P2P Chat Pipe</h3>
-    <input id="messageInput" type="text" placeholder="Type a message..." disabled />
-    <button id="sendButton" disabled>Send Message</button>
-    <p><strong>Chat Logs:</strong></p>
-    <pre id="logs" style="background: #f0f0f0; padding: 10px;"></pre>
+    <div class="box">
+        <h3>P2P Chat Pipe</h3>
+        <input id="messageInput" type="text" placeholder="Type a message..." disabled />
+        <button id="sendButton" disabled>Send Message</button>
+        <p><strong>Chat Logs:</strong></p>
+        <pre id="logs" style="background: #f0f0f0; padding: 10px; max-height: 150px; overflow-y: auto;"></pre>
+    </div>
 
     <script>
         const peerB = new RTCPeerConnection({ iceServers: [] });
         let channelB;
 
+        // Handle Text Chat Connection
         peerB.ondatachannel = (event) => {
             channelB = event.channel;
             channelB.onopen = () => {
                 document.getElementById("messageInput").disabled = false;
                 document.getElementById("sendButton").disabled = false;
-                document.getElementById("logs").innerText += "CONNECTED! You can now type messages.\n";
+                document.getElementById("logs").innerText += "CONNECTED! Text and Video channels are live.\n";
             };
             channelB.onmessage = e => document.getElementById("logs").innerText += "Received: " + e.data + "\n";
         };
 
+        // Handle Incoming Video Stream
+        peerB.ontrack = (event) => {
+            document.getElementById("remoteVideo").srcObject = event.streams[0];
+        };
+
         document.getElementById("createAnswer").onclick = async () => {
-            const offerText = document.getElementById("remoteCode").value;
-            await peerB.setRemoteDescription(new RTCSessionDescription(JSON.parse(offerText)));
-            
-            peerB.onicecandidate = e => {
-                if (!e.candidate) {
-                    document.getElementById("localCode").value = JSON.stringify(peerB.localDescription);
-                }
-            };
-            const answer = await peerB.createAnswer();
-            await peerB.setLocalDescription(answer);
+            try {
+                // 1. Grab camera and microphone stream
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById("localVideo").srcObject = stream;
+
+                // 2. Inject video/audio tracks into the connection object
+                stream.getTracks().forEach(track => peerB.addTrack(track, stream));
+
+                // 3. Process Page A's offer
+                const offerText = document.getElementById("remoteCode").value;
+                await peerB.setRemoteDescription(new RTCSessionDescription(JSON.parse(offerText)));
+                
+                // 4. Collect network routing paths
+                peerB.onicecandidate = e => {
+                    if (!e.candidate) {
+                        document.getElementById("localCode").value = JSON.stringify(peerB.localDescription);
+                    }
+                };
+
+                // 5. Create standard SDP Answer
+                const answer = await peerB.createAnswer();
+                await peerB.setLocalDescription(answer);
+            } catch (err) {
+                alert("Camera access denied or error: " + err.message);
+            }
         };
 
         document.getElementById("sendButton").onclick = () => {
